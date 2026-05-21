@@ -1,0 +1,7 @@
+requests>=2.31
+openai>=1.40
+google-cloud-bigquery>=3.0
+google-cloud-firestore>=2.11
+google-auth>=2.0
+python-dotenv>=1.0
+python-dateutil>=2.8

@@ -1,0 +1,24 @@
+services:
+  - type: cron
+    name: fsl-pipelines
+    runtime: python
+    schedule: "0 0,12 * * *"   # 1 AM and 1 PM WAT (UTC+1)
+    buildCommand: pip install -r requirements.txt
+    startCommand: python pipeline_orchestrator.py
+    envVars:
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GMAIL_SENDER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: ALERT_RECIPIENT
+        sync: false
+      - key: GMAIL_READER
+        sync: false
+      - key: GMAIL_READER_PASSWORD
+        sync: false
