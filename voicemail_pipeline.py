@@ -98,7 +98,12 @@ Extract the following fields:
 - Payment_Method: Only if customer claims prior payment not yet reflected. Options: Branch payment, Zenith bank, Credit officer, Paystack, Union Bank, Leader, Providus Bank, Sales Rep, Unknown
 - Promise_to_Pay: Yes/No/Unknown
 - Right_Party_Contact: Yes/No/Unknown
-- Willingness: Always set to "2 Medium"
+- Willingness: Score the customer's willingness to repay based on their behaviour in the voicemail. Choose exactly one:
+  - "0 Unwilling (Not Speaking)" — Customer picked up but said nothing at all, completely silent
+  - "1 Unwilling" — Customer spoke but explicitly refused to pay or showed no willingness
+  - "2 Medium" — Customer was reluctant but did not outright refuse, OR agreed without a confirmed PTP (a confirmed PTP requires both a ptp_date AND an Amount_Promised)
+  - "3 Willing" — Customer willingly agreed to pay, most often with a confirmed PTP (date + amount)
+  - "Unknown" — Cannot be determined (e.g. message cut off, debt denied, transcript unclear)
 - agent: Always set to "Voicemail"
 - alternative_phone: Alternate number provided (blank if none)
 - callback_requested: Yes/No/Unknown
@@ -455,7 +460,7 @@ def run():
         now_ms   = int(time.time() * 1000)
         filename = f"voicemail_uploads/voicemail_{phone}_{now_ms}.{ext}"
         doc_id   = f"{phone}_{now_ms}"
-        now_iso  = to_iso(datetime.now(timezone.utc))
+        now_iso  = to_iso(datetime.now(timezone(timedelta(hours=1))))
 
         try:
             email_dt = dateutil_parser.parse(date_str)
@@ -512,17 +517,16 @@ def run():
             "updated_at":               now_iso,
             "discount_accepted":        extracted.get("discount_accepted", ""),
             "language":                 extracted.get("language", ""),
-            "doc_id":                   doc_id,
         }
 
         try:
-            fs_upsert(db, "call_notes_latest", "phone", call_notes)
+            db.collection("call_notes_latest").document(phone).set(call_notes, merge=True)
             log.info("  ✓ call_notes_latest")
         except Exception as exc:
             log.error("  ✗ call_notes_latest: %s", exc)
 
         try:
-            fs_upsert(db, "call_notes_2", "doc_id", call_notes)
+            db.collection("call_notes_2").document(doc_id).set(call_notes, merge=True)
             log.info("  ✓ call_notes_2")
         except Exception as exc:
             log.error("  ✗ call_notes_2: %s", exc)

@@ -105,7 +105,12 @@ Amount_Promised: Exact amount customer committed to paying (blank if none)
 Payment_Method: Only if customer claims prior payment not yet reflected. One of: Branch payment, Zenith bank, Credit officer, Paystack, Union Bank, Leader, Providus Bank, Sales Rep, Unknown
 Promise_to_Pay: Yes/No/Unknown
 Right_Party_Contact: Yes/No/Unknown
-Willingness: Always set to "2 Medium"
+Willingness: Score the customer's willingness to repay based on their behaviour in the call. Choose exactly one:
+  - "0 Unwilling (Not Speaking)" — Customer picked up but said nothing at all, completely silent
+  - "1 Unwilling" — Customer spoke but explicitly refused to pay or showed no willingness
+  - "2 Medium" — Customer was reluctant but did not outright refuse, OR agreed without a confirmed PTP (a confirmed PTP requires both a ptp_date AND an Amount_Promised)
+  - "3 Willing" — Customer willingly agreed to pay, most often with a confirmed PTP (date + amount)
+  - "Unknown" — Cannot be determined (e.g. call dropped, debt denied, transcript unclear)
 agent: Always set to "Voice Bot"
 alternative_phone: Alternate number provided by customer (blank if none)
 callback_requested: Yes/No/Unknown
@@ -164,8 +169,9 @@ _EL_HEADERS = {"xi-api-key": ELEVENLABS_API_KEY}
 
 
 def _time_window() -> tuple[int, int]:
-    now   = datetime.now(timezone.utc)
-    after = int((now - timedelta(hours=12)).timestamp())
+    wat   = timezone(timedelta(hours=1))
+    now   = datetime.now(wat)
+    after = int((now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
     before = int(now.timestamp())
     return before, after
 
@@ -426,7 +432,7 @@ def run():
             "conversation_id":     conversation_id,
         }
         try:
-            fs_upsert(db, "calls_va_answered", "conversation_id", va_doc)
+            db.collection("calls_va_answered").document(conversation_id).set(va_doc, merge=True)
             log.info("  ✓ calls_va_answered")
         except Exception as exc:
             log.error("  ✗ calls_va_answered: %s", exc)
@@ -459,7 +465,7 @@ def run():
         # ── 7. Build shared document ──────────────────────────────────────────
         doc_id  = f"{phone_norm}_{epoch_ms(system_time)}"
         call_ts = to_iso(parse_system_time(system_time))
-        now_dt  = to_iso(datetime.now(timezone.utc))
+        now_dt  = to_iso(datetime.now(timezone(timedelta(hours=1))))
 
         call_notes = {
             "Amount_Promised":          extracted.get("Amount_Promised", ""),
@@ -485,19 +491,18 @@ def run():
             "updated_at":               now_dt,
             "discount_accepted":        extracted.get("discount_accepted"),
             "language":                 extracted.get("language", ""),
-            "doc_id":                   doc_id,
         }
 
-        # ── 7. Firestore — call_notes_latest (upsert by phone) ───────────────
+        # ── 7. Firestore — call_notes_latest (doc ID = phone) ───────────────
         try:
-            fs_upsert(db, "call_notes_latest", "phone", call_notes)
+            db.collection("call_notes_latest").document(phone_norm).set(call_notes, merge=True)
             log.info("  ✓ call_notes_latest")
         except Exception as exc:
             log.error("  ✗ call_notes_latest: %s", exc)
 
-        # ── 8. Firestore — call_notes_2 (upsert by doc_id) ───────────────────
+        # ── 8. Firestore — call_notes_2 (doc ID = phone_timestamp) ───────────
         try:
-            fs_upsert(db, "call_notes_2", "doc_id", call_notes)
+            db.collection("call_notes_2").document(doc_id).set(call_notes, merge=True)
             log.info("  ✓ call_notes_2")
         except Exception as exc:
             log.error("  ✗ call_notes_2: %s", exc)
