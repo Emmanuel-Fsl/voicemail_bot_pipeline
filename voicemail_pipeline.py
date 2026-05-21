@@ -58,7 +58,7 @@ log = logging.getLogger(__name__)
 # ── Environment ────────────────────────────────────────────────────────────────
 
 OPENAI_API_KEY        = os.environ["OPENAI_API_KEY"]
-GOOGLE_SA_FILE        = os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"]
+GOOGLE_SA_FILE        = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json")
 GMAIL_READER          = os.environ["GMAIL_READER"]            # account to READ voicemails from
 GMAIL_READER_PASSWORD = os.environ["GMAIL_READER_PASSWORD"]   # app password for reader account
 GMAIL_SENDER          = os.environ["GMAIL_SENDER"]            # account to SEND alerts from

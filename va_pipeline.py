@@ -50,7 +50,7 @@ log = logging.getLogger(__name__)
 
 ELEVENLABS_API_KEY  = os.environ["ELEVENLABS_API_KEY"]
 OPENAI_API_KEY      = os.environ["OPENAI_API_KEY"]
-GOOGLE_SA_FILE      = os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"]
+GOOGLE_SA_FILE      = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json")
 GMAIL_SENDER        = os.environ["GMAIL_SENDER"]
 GMAIL_APP_PASSWORD  = os.environ["GMAIL_APP_PASSWORD"]
 ALERT_RECIPIENT     = os.getenv("ALERT_RECIPIENT", "payments@fsldigital.com")
