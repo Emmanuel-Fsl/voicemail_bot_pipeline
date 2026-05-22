@@ -45,9 +45,7 @@ if os.name == "nt":
 # Tip: to ensure you use the same Python interpreter, prefer [sys.executable, "your_script.py"]
 # ─────────────────────────────────────────────────────────────────────────────
 STEPS: List[Dict[str, Any]] = [
-    # Example for your first campaign script (Python)
     {"name": "Load VA Pipeline", "cmd": [sys.executable, "va_pipeline.py"]},
-    {"name": "Load Voicemail Pipeline", "cmd": [sys.executable, "voicemail_pipeline.py"]},
 ]
     # You can add non-Python tasks too, e.g. a shell command:    # {"name": "Touch heartbeat file", "cmd": "touch heartbeat.ok", "shell": True},    ]
 # Default delay between steps (seconds)

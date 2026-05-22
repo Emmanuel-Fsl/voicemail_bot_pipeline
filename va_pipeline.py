@@ -169,9 +169,8 @@ _EL_HEADERS = {"xi-api-key": ELEVENLABS_API_KEY}
 
 
 def _time_window() -> tuple[int, int]:
-    wat   = timezone(timedelta(hours=1))
-    now   = datetime.now(wat)
-    after = int((now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+    now    = datetime.now(timezone.utc)
+    after  = int((now - timedelta(hours=12)).timestamp())
     before = int(now.timestamp())
     return before, after
 
@@ -415,10 +414,17 @@ def run():
         duration    = metadata.get("call_duration_secs", 0) or 0
         system_time = dyn_vars.get("system__time", "")
         call_dt     = parse_call_dt(system_time)
+        if not call_dt:
+            start_unix = metadata.get("start_time_unix_secs")
+            if start_unix:
+                call_dt = datetime.fromtimestamp(start_unix, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+        ext_number  = phone_call.get("external_number", "")
+        phone_norm  = normalise_phone(ext_number) if ext_number else normalise_phone(user_id)
 
         # ── 2. Store to calls_va_answered (Category always null here) ────────
         va_doc = {
-            "phone_number":        user_id,
+            "phone_number":        phone_norm,
             "duration":            str(duration),
             "category":            None,
             "status":              analysis.get("call_successful", ""),
@@ -452,17 +458,13 @@ def run():
 
         category = extracted.get("Category", "")
 
-        # ── 5. Normalise phone (needed for both BQ lookup and doc fields) ────────
-        ext_number = phone_call.get("external_number", "")
-        phone_norm = normalise_phone(ext_number) if ext_number else normalise_phone(user_id)
-
-        # ── 6. BigQuery — institution lookup ─────────────────────────────────
+        # ── 5. BigQuery — institution lookup ─────────────────────────────────
         institution = query_institution(phone_norm, bq)
         if not institution:
             log.info("  skip — no institution found for %s", phone_norm)
             continue
 
-        # ── 7. Build shared document ──────────────────────────────────────────
+        # ── 6. Build shared document ──────────────────────────────────────────
         doc_id  = f"{phone_norm}_{epoch_ms(system_time)}"
         call_ts = to_iso(parse_system_time(system_time))
         now_dt  = to_iso(datetime.now(timezone(timedelta(hours=1))))
