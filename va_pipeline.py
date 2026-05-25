@@ -287,25 +287,6 @@ def query_institution(user_id: str, bq_client: bigquery.Client) -> Optional[str]
     return None
 
 
-# ── Firestore ──────────────────────────────────────────────────────────────────
-
-def fs_upsert(db: firestore.Client, collection: str, key_field: str, data: dict):
-    key_value = data.get(key_field)
-    if key_value is None:
-        log.warning("Skipping upsert into '%s' — key field '%s' is missing", collection, key_field)
-        return
-    docs = list(
-        db.collection(collection)
-          .where(key_field, "==", key_value)
-          .limit(1)
-          .stream()
-    )
-    if docs:
-        docs[0].reference.set(data, merge=True)
-    else:
-        db.collection(collection).add(data)
-
-
 # ── Gmail ──────────────────────────────────────────────────────────────────────
 
 def send_alert(
@@ -369,6 +350,8 @@ def to_iso(dt: datetime) -> str:
 
 
 def parse_call_dt(system_time: str) -> str:
+    if not system_time:
+        return ""
     return parse_system_time(system_time).strftime("%Y-%m-%dT%H:%M:%S")
 
 
@@ -422,26 +405,29 @@ def run():
         ext_number  = phone_call.get("external_number", "")
         phone_norm  = normalise_phone(ext_number) if ext_number else normalise_phone(user_id)
 
-        # ── 2. Store to calls_va_answered (Category always null here) ────────
-        va_doc = {
-            "phone_number":        phone_norm,
-            "duration":            str(duration),
-            "category":            None,
-            "status":              analysis.get("call_successful", ""),
-            "datetime":            call_dt,
-            "timestamp":           datetime.now(timezone.utc).isoformat(),
-            "call_type":           phone_call.get("direction", ""),
-            "agent_id":            conv.get("agent_id", ""),
-            "agent_name":          conv.get("agent_name", ""),
-            "voicemail_detection": str((feat_usage.get("voicemail_detection") or {}).get("used", "")),
-            "transcript_summary":  analysis.get("transcript_summary", ""),
-            "conversation_id":     conversation_id,
-        }
-        try:
-            db.collection("calls_va_answered").document(conversation_id).set(va_doc, merge=True)
-            log.info("  ✓ calls_va_answered")
-        except Exception as exc:
-            log.error("  ✗ calls_va_answered: %s", exc)
+        # ── 2. Store to calls_va_answered (skip zero-duration calls) ────────
+        if duration == 0:
+            log.info("  skip calls_va_answered — duration 0")
+        else:
+            va_doc = {
+                "phone_number":        phone_norm,
+                "duration":            str(duration),
+                "category":            None,
+                "status":              analysis.get("call_successful", ""),
+                "datetime":            call_dt,
+                "timestamp":           datetime.now(timezone.utc).isoformat(),
+                "call_type":           phone_call.get("direction", ""),
+                "agent_id":            conv.get("agent_id", ""),
+                "agent_name":          conv.get("agent_name", ""),
+                "voicemail_detection": str((feat_usage.get("voicemail_detection") or {}).get("used", "")),
+                "transcript_summary":  analysis.get("transcript_summary", ""),
+                "conversation_id":     conversation_id,
+            }
+            try:
+                db.collection("calls_va_answered").document(conversation_id).set(va_doc, merge=True)
+                log.info("  ✓ calls_va_answered")
+            except Exception as exc:
+                log.error("  ✗ calls_va_answered: %s", exc)
 
         # ── 3. Duration gate — skip calls shorter than 40 seconds ────────────
         if duration < MIN_DURATION_SECS:
