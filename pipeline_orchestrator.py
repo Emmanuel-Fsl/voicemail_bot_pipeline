@@ -46,6 +46,7 @@ if os.name == "nt":
 # ─────────────────────────────────────────────────────────────────────────────
 STEPS: List[Dict[str, Any]] = [
     {"name": "Load VA Pipeline", "cmd": [sys.executable, "va_pipeline.py"]},
+    {"name": "Load WA Pipeline", "cmd": [sys.executable, "wa_pipeline.py"]},
 ]
     # You can add non-Python tasks too, e.g. a shell command:    # {"name": "Touch heartbeat file", "cmd": "touch heartbeat.ok", "shell": True},    ]
 # Default delay between steps (seconds)
