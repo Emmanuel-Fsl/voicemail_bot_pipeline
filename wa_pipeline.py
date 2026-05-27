@@ -614,7 +614,12 @@ def run():
                      .get("dynamic_variables") or {})
 
         # ── Phone: WhatsApp passes number as a dynamic variable, not phone_call ──
-        raw_phone  = dyn_vars.get("phone_number") or dyn_vars.get("p", "")
+        raw_phone  = (
+            dyn_vars.get("phone_number") or
+            dyn_vars.get("p") or
+            str(dyn_vars.get("system__caller_id") or "") or
+            ""
+        )
         phone_norm = normalise_phone(raw_phone) if raw_phone else conv.get("user_id", "")
         if not phone_norm:
             log.warning("  no phone number found for %s — call_notes writes will be skipped", conversation_id)
