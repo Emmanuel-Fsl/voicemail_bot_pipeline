@@ -15,7 +15,7 @@ Flow per conversation:
  10. Upsert call_notes_latest  (key: phone)
  11. Upsert call_notes_2       (key: doc_id)
  12. Send email alert if category is Complaint / Negotiation / PTP / Paid / Callback Request / Request to Speak to Agent / Payment Receipt Received
-     → Payment Receipt Received also attaches images and CCs a random account from RECEIPT_CC_POOL
+     → Payment Receipt Received also attaches images; all emails routed by phone mod 5, CC payments@fsldigital.com
 
 Run manually or via cron at 1 AM:
     0 1 * * * /path/to/venv/bin/python /path/to/wa_pipeline.py >> /var/log/wa_pipeline.log 2>&1
@@ -80,13 +80,13 @@ ALERT_CATEGORIES = {
     "Payment Receipt Received",
 }
 
-RECEIPT_CC_POOL = [
-    "dami.adeyanju@fsldigital.com",
-    "gbolade@fsldigital.com",
-    "kesta@fsldigital.com",
-    "emmanuella@fsldigital.com",
-    "jedidah@fsldigital.com",
-]
+RECIPIENT_MAP = {
+    0: "gbolade@fsldigital.com",
+    1: "dami.adeyanju@fsldigital.com",
+    2: "jedidah@fsldigital.com",
+    3: "kesta@fsldigital.com",
+    4: "emmanuella@fsldigital.com",
+}
 
 
 # ── Prompts / schema ───────────────────────────────────────────────────────────
@@ -309,6 +309,12 @@ def query_institution(user_id: str, bq_client: bigquery.Client) -> Optional[str]
 
 # ── Gmail ──────────────────────────────────────────────────────────────────────
 
+def route_recipient(phone: str) -> str:
+    digits = ''.join(c for c in phone if c.isdigit())
+    last_two = int(digits[-2:]) if len(digits) >= 2 else 0
+    return RECIPIENT_MAP[last_two % 5]
+
+
 def send_alert(
     phone: str,
     category: str,
@@ -316,18 +322,14 @@ def send_alert(
     call_dt: str,
     summary: str,
     other_info: str,
+    recipient: str,
     attachments: Optional[list] = None,
-    cc: Optional[str] = None,
 ):
-    """Send alert email. For Payment Receipt Received, pass image bytes as
-    attachments=[{fname, data, ctype}] and a cc address.
-    """
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"WhatsApp Bot Follow-up Required - {category} | {phone}"
     msg["From"]    = f"whatsappbot <{GMAIL_SENDER}>"
-    msg["To"]      = ALERT_RECIPIENT
-    if cc:
-        msg["Cc"] = cc
+    msg["To"]      = recipient
+    msg["Cc"]      = ALERT_RECIPIENT
 
     html = (
         "<h2>WhatsApp Bot Follow-up Required</h2>"
@@ -347,10 +349,9 @@ def send_alert(
         img.add_header("Content-Disposition", "attachment", filename=att["fname"])
         msg.attach(img)
 
-    recipients = [ALERT_RECIPIENT] + ([cc] if cc else [])
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(GMAIL_SENDER, GMAIL_APP_PASSWORD)
-        smtp.sendmail(GMAIL_SENDER, recipients, msg.as_string())
+        smtp.sendmail(GMAIL_SENDER, [recipient, ALERT_RECIPIENT], msg.as_string())
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -761,7 +762,6 @@ def run():
             "updated_at":               now_dt,
             "discount_accepted":        extracted.get("discount_accepted"),
             "language":                 expand_language(metadata.get("main_language", "")),
-            "Category":                 category,
         }
 
         # ── 9. Firestore — call_notes_latest (doc ID = phone) ───────────────
@@ -795,8 +795,8 @@ def run():
                     call_dt=call_dt,
                     summary=analysis.get("transcript_summary", ""),
                     other_info=dcv("other_information"),
+                    recipient=route_recipient(phone_norm),
                     attachments=uploaded_files if is_receipt else None,
-                    cc=random.choice(RECEIPT_CC_POOL) if is_receipt else None,
                 )
                 log.info("  ✓ email sent — %s", category)
             except Exception as exc:

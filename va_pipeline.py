@@ -71,6 +71,14 @@ ALERT_CATEGORIES = {
     "Paid",
 }
 
+RECIPIENT_MAP = {
+    0: "gbolade@fsldigital.com",
+    1: "dami.adeyanju@fsldigital.com",
+    2: "jedidah@fsldigital.com",
+    3: "kesta@fsldigital.com",
+    4: "emmanuella@fsldigital.com",
+}
+
 
 # ── Prompts / schema ───────────────────────────────────────────────────────────
 
@@ -289,6 +297,12 @@ def query_institution(user_id: str, bq_client: bigquery.Client) -> Optional[str]
 
 # ── Gmail ──────────────────────────────────────────────────────────────────────
 
+def route_recipient(phone: str) -> str:
+    digits = ''.join(c for c in phone if c.isdigit())
+    last_two = int(digits[-2:]) if len(digits) >= 2 else 0
+    return RECIPIENT_MAP[last_two % 5]
+
+
 def send_alert(
     phone: str,
     category: str,
@@ -296,11 +310,13 @@ def send_alert(
     call_dt: str,
     summary: str,
     other_info: str,
+    recipient: str,
 ):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"Voice Bot Follow-up Required - {category} | {phone}"
     msg["From"]    = f"voicebot <{GMAIL_SENDER}>"
-    msg["To"]      = ALERT_RECIPIENT
+    msg["To"]      = recipient
+    msg["Cc"]      = ALERT_RECIPIENT
 
     html = (
         "<h2>Voice Bot Follow-up Required</h2>"
@@ -317,7 +333,7 @@ def send_alert(
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(GMAIL_SENDER, GMAIL_APP_PASSWORD)
-        smtp.send_message(msg)
+        smtp.sendmail(GMAIL_SENDER, [recipient, ALERT_RECIPIENT], msg.as_string())
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -505,6 +521,7 @@ def run():
                     call_dt=call_dt,
                     summary=analysis.get("transcript_summary", ""),
                     other_info=extracted.get("other_information", ""),
+                    recipient=route_recipient(phone_norm),
                 )
                 log.info("  ✓ email sent — %s", category)
             except Exception as exc:
