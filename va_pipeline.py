@@ -527,6 +527,23 @@ def run():
             except Exception as exc:
                 log.error("  ✗ email: %s", exc)
 
+        # ── 10. agent_notifications ───────────────────────────────────────────
+        try:
+            db.collection("agent_notifications").document(conversation_id).set({
+                "type":            "voice_call",
+                "recipient_email": route_recipient(phone_norm),
+                "phone":           phone_norm,
+                "category":        category,
+                "institution":     institution,
+                "summary":         analysis.get("transcript_summary", ""),
+                "other_info":      extracted.get("other_information", ""),
+                "timestamp":       call_ts,
+                "read":            False,
+            })
+            log.info("  ✓ agent_notifications")
+        except Exception as exc:
+            log.error("  ✗ agent_notifications: %s", exc)
+
     log.info("=== Pipeline complete ===")
 
 

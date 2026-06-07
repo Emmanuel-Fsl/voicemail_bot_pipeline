@@ -802,6 +802,23 @@ def run():
             except Exception as exc:
                 log.error("  ✗ email: %s", exc)
 
+        # ── 12. agent_notifications ───────────────────────────────────────────
+        try:
+            db.collection("agent_notifications").document(conversation_id).set({
+                "type":            "whatsapp",
+                "recipient_email": route_recipient(phone_norm),
+                "phone":           phone_norm,
+                "category":        category,
+                "institution":     institution,
+                "summary":         analysis.get("transcript_summary", ""),
+                "other_info":      dcv("other_information"),
+                "timestamp":       call_ts,
+                "read":            False,
+            })
+            log.info("  ✓ agent_notifications")
+        except Exception as exc:
+            log.error("  ✗ agent_notifications: %s", exc)
+
     log.info("=== WA Pipeline complete ===")
 
 
