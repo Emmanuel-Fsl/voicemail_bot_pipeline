@@ -511,7 +511,7 @@ def run():
         except Exception as exc:
             log.error("  ✗ call_notes_2: %s", exc)
 
-        # ── 9. Email alert for high-priority categories ───────────────────────
+        # ── 9. Email alert + agent_notifications (alert categories only) ─────────
         if category in ALERT_CATEGORIES:
             try:
                 send_alert(
@@ -527,22 +527,21 @@ def run():
             except Exception as exc:
                 log.error("  ✗ email: %s", exc)
 
-        # ── 10. agent_notifications ───────────────────────────────────────────
-        try:
-            db.collection("agent_notifications").document(conversation_id).set({
-                "type":            "voice_call",
-                "recipient_email": route_recipient(phone_norm),
-                "phone":           phone_norm,
-                "category":        category,
-                "institution":     institution,
-                "summary":         analysis.get("transcript_summary", ""),
-                "other_info":      extracted.get("other_information", ""),
-                "timestamp":       call_ts,
-                "read":            False,
-            })
-            log.info("  ✓ agent_notifications")
-        except Exception as exc:
-            log.error("  ✗ agent_notifications: %s", exc)
+            try:
+                db.collection("agent_notifications").document(conversation_id).set({
+                    "type":            "voice_call",
+                    "recipient_email": route_recipient(phone_norm),
+                    "phone":           phone_norm,
+                    "category":        category,
+                    "institution":     institution,
+                    "summary":         analysis.get("transcript_summary", ""),
+                    "other_info":      extracted.get("other_information", ""),
+                    "timestamp":       call_ts,
+                    "read":            False,
+                })
+                log.info("  ✓ agent_notifications")
+            except Exception as exc:
+                log.error("  ✗ agent_notifications: %s", exc)
 
     log.info("=== Pipeline complete ===")
 
