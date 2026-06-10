@@ -538,6 +538,7 @@ def run():
                     "other_info":      extracted.get("other_information", ""),
                     "timestamp":       call_ts,
                     "read":            False,
+                    "received_at":     firestore.SERVER_TIMESTAMP,
                 })
                 log.info("  ✓ agent_notifications")
             except Exception as exc:
