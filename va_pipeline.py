@@ -77,6 +77,7 @@ RECIPIENT_MAP = {
     2: "jedidah@fsldigital.com",
     3: "kesta@fsldigital.com",
     4: "emmanuella@fsldigital.com",
+    5: "itoro@fsldigital.com",
 }
 
 
@@ -300,7 +301,7 @@ def query_institution(user_id: str, bq_client: bigquery.Client) -> Optional[str]
 def route_recipient(phone: str) -> str:
     digits = ''.join(c for c in phone if c.isdigit())
     last_two = int(digits[-2:]) if len(digits) >= 2 else 0
-    return RECIPIENT_MAP[last_two % 5]
+    return RECIPIENT_MAP[last_two % 6]
 
 
 def send_alert(

@@ -22,3 +22,12 @@ services:
         sync: false
       - key: GMAIL_READER_PASSWORD
         sync: false
+
+  - type: web
+    name: kudi-webhook
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn kudi_webhook:app --bind 0.0.0.0:$PORT --workers 2
+    envVars:
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
