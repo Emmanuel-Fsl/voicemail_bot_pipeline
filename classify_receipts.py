@@ -296,8 +296,8 @@ def send_email(excel_bytes: bytes):
 </style></head><body><div class="c">
   <div class="hd"><h2>FSS — Payment Receipts</h2>
     <p>Prepared for: Joyce &nbsp;|&nbsp; Generated: {today_str}</p></div>
-  <div class="sec"><p>Hey Team,</p>
-    <p>Please find attached the payment receipts received by FSS classified for today.</p></div>
+  <div class="sec"><p>Hey Joyce,</p>
+    <p>Please find attached the payment receipts received by FSS for {INSTITUTION} classified for today.</p></div>
   <div class="sec"><div class="st">Classification Results Guide</div>
     <table><thead><tr><th>Field</th><th>Description</th></tr></thead><tbody>
       <tr><td><strong>Detected Bank</strong></td><td>The bank identified as the destination of the transaction.</td></tr>
