@@ -298,7 +298,16 @@ def query_institution(user_id: str, bq_client: bigquery.Client) -> Optional[str]
 
 # ── Gmail ──────────────────────────────────────────────────────────────────────
 
-def route_recipient(phone: str) -> str:
+INSTITUTION_OVERRIDES = {
+    "NUMIDA":  "diana@fsldigital.com",
+    "PEZESHA": "diana@fsldigital.com",
+}
+
+
+def route_recipient(phone: str, institution: str = "") -> str:
+    override = INSTITUTION_OVERRIDES.get((institution or "").upper())
+    if override:
+        return override
     digits = ''.join(c for c in phone if c.isdigit())
     last_two = int(digits[-2:]) if len(digits) >= 2 else 0
     return RECIPIENT_MAP[last_two % 6]
@@ -522,7 +531,7 @@ def run():
                     call_dt=call_dt,
                     summary=analysis.get("transcript_summary", ""),
                     other_info=extracted.get("other_information", ""),
-                    recipient=route_recipient(phone_norm),
+                    recipient=route_recipient(phone_norm, institution),
                 )
                 log.info("  ✓ email sent — %s", category)
             except Exception as exc:
@@ -531,7 +540,7 @@ def run():
             try:
                 db.collection("agent_notifications").document(conversation_id).set({
                     "type":            "voice_call",
-                    "recipient_email": route_recipient(phone_norm),
+                    "recipient_email": route_recipient(phone_norm, institution),
                     "phone":           phone_norm,
                     "category":        category,
                     "institution":     institution,
