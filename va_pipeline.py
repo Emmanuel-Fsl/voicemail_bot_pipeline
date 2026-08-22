@@ -18,7 +18,6 @@ Run manually or via cron at 1 AM:
     0 1 * * * /path/to/venv/bin/python /path/to/pipeline.py >> /var/log/pipeline.log 2>&1
 """
 
-import base64
 import json
 import logging
 import os
@@ -157,9 +156,9 @@ STRICT OUTPUT RULES:
 
 def _creds():
     _scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    raw = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or "").strip()
     if raw:
-        info = json.loads(base64.b64decode(raw))
+        info = json.loads(raw)
         return service_account.Credentials.from_service_account_info(info, scopes=_scopes)
     return service_account.Credentials.from_service_account_file(GOOGLE_SA_FILE, scopes=_scopes)
 

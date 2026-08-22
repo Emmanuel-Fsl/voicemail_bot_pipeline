@@ -184,7 +184,7 @@ def _creds():
         "https://www.googleapis.com/auth/cloud-platform",
         "https://www.googleapis.com/auth/datastore",
     ]
-    raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    raw = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or "").strip()
     if raw:
         info = json.loads(raw)
         return service_account.Credentials.from_service_account_info(info, scopes=scopes)
