@@ -184,6 +184,10 @@ def _creds():
         "https://www.googleapis.com/auth/cloud-platform",
         "https://www.googleapis.com/auth/datastore",
     ]
+    raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if raw:
+        info = json.loads(raw)
+        return service_account.Credentials.from_service_account_info(info, scopes=scopes)
     return service_account.Credentials.from_service_account_file(GOOGLE_SA_FILE, scopes=scopes)
 
 
