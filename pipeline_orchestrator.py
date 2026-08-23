@@ -19,20 +19,26 @@ Edit the STEPS list to point at your scripts.
 """
 
 from __future__ import annotations
-import sys, io,os
+import sys, io, os
 import argparse
 import json
 import logging
 import os
 import platform
 import shlex
+import smtplib
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+
+from dotenv import load_dotenv
+load_dotenv()
 
 # Force stdout to use UTF-8 so Windows can print box characters like ─ and •
 if os.name == "nt":
@@ -173,12 +179,12 @@ def run_step(
             if completed.stdout:
                 for line in completed.stdout.splitlines():
                     logger.info("[stdout] %s", line)
-                stdout_tail = "\n".join(completed.stdout.splitlines()[-10:])  # last 10 lines
+                stdout_tail = completed.stdout
 
             if completed.stderr:
                 for line in completed.stderr.splitlines():
                     logger.error("[stderr] %s", line)
-                stderr_tail = "\n".join(completed.stderr.splitlines()[-10:])
+                stderr_tail = completed.stderr
 
             if rc == 0:
                 break  # success
@@ -222,6 +228,95 @@ def run_step(
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
+def send_summary_email(results: List[StepResult]) -> None:
+    smtp_host  = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port  = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user  = os.getenv("GMAIL_SENDER") or os.getenv("SMTP_USER", "")
+    smtp_pass  = os.getenv("GMAIL_APP_PASSWORD") or os.getenv("SMTP_PASS", "")
+    email_from = os.getenv("EMAIL_FROM", smtp_user)
+    email_to_raw = os.getenv("EMAIL_TO", "")
+
+    logger = logging.getLogger("orchestrator.email")
+
+    if not smtp_user or not smtp_pass or not email_to_raw:
+        logger.warning("Email skipped — GMAIL_SENDER/GMAIL_APP_PASSWORD/EMAIL_TO not set")
+        return
+
+    recipients = [e.strip() for e in email_to_raw.split(",") if e.strip()]
+    ok   = sum(1 for r in results if r.status == "success")
+    fail = sum(1 for r in results if r.status != "success")
+    overall = "SUCCESS" if fail == 0 else "FAILED"
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    # ── Build HTML body ───────────────────────────────────────────────────────
+    status_colour = {"success": "#2e7d32", "failed": "#c62828", "skipped": "#f57c00"}
+
+    rows = ""
+    for r in results:
+        colour = status_colour.get(r.status, "#555")
+        rows += (
+            f"<tr>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid #eee'>{r.name}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid #eee;"
+            f"color:{colour};font-weight:bold'>{r.status.upper()}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid #eee'>{r.duration_sec:.1f}s</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid #eee'>{r.return_code}</td>"
+            f"</tr>"
+        )
+
+    failure_detail = ""
+    for r in results:
+        if r.status != "success":
+            stderr_block = (
+                f"<pre style='background:#fbe9e7;padding:10px;border-radius:4px;"
+                f"font-size:12px;overflow-x:auto;white-space:pre-wrap'>{r.stderr_tail or '(no stderr)'}</pre>"
+            )
+            failure_detail += (
+                f"<h3 style='color:#c62828;margin-top:24px'>✗ {r.name}</h3>"
+                f"<p><strong>Error:</strong> {r.error or '—'}</p>"
+                f"<p><strong>Last stderr lines:</strong></p>{stderr_block}"
+            )
+
+    html = f"""
+    <div style='font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#333'>
+      <div style='background:{"#2e7d32" if fail==0 else "#c62828"};color:#fff;
+                  padding:16px 24px;border-radius:6px 6px 0 0'>
+        <h2 style='margin:0'>FSS Pipeline — {overall}</h2>
+        <p style='margin:4px 0 0;font-size:13px'>{ts} &nbsp;|&nbsp;
+           {ok} succeeded &nbsp;/&nbsp; {fail} failed &nbsp;/&nbsp; {len(results)} total</p>
+      </div>
+      <div style='border:1px solid #ddd;border-top:none;padding:20px 24px;border-radius:0 0 6px 6px'>
+        <table style='width:100%;border-collapse:collapse;font-size:13px'>
+          <thead>
+            <tr style='background:#f5f5f5'>
+              <th style='padding:8px 12px;text-align:left'>Step</th>
+              <th style='padding:8px 12px;text-align:left'>Status</th>
+              <th style='padding:8px 12px;text-align:left'>Duration</th>
+              <th style='padding:8px 12px;text-align:left'>Exit code</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+        {failure_detail}
+      </div>
+    </div>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"[{overall}] FSS Pipeline — {ok}/{len(results)} steps passed ({ts})"
+    msg["From"]    = f"FSS Orchestrator <{email_from}>"
+    msg["To"]      = ", ".join(recipients)
+    msg.attach(MIMEText(html, "html"))
+
+    try:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as server:
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(email_from, recipients, msg.as_string())
+        logger.info("Summary email sent to %s", ", ".join(recipients))
+    except Exception as exc:
+        logger.error("Failed to send summary email: %s", exc)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Universal sequential orchestrator.")
     parser.add_argument("--delay", type=float, default=DEFAULT_DELAY_S, help="Delay (seconds) between steps.")
@@ -231,11 +326,24 @@ def main():
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files.")
     parser.add_argument("--log-file", type=str, default="orchestrator.log", help="Log file name.")
     parser.add_argument("--summary-dir", type=str, default="summaries", help="Directory to write JSON summaries.")
+    parser.add_argument("--test-email", action="store_true", help="Send a test summary email with fake results and exit.")
 
     args = parser.parse_args()
 
     log_path = setup_logging(Path(args.log_dir), args.log_file)
     logger = logging.getLogger("orchestrator")
+
+    if args.test_email:
+        fake = [
+            StepResult("Load VA Pipeline", ["python", "va_pipeline.py"], None,
+                       "2026-01-01T00:00:00Z", "2026-01-01T00:00:07Z", 7.1, 0, "success", 1),
+            StepResult("Load WA Pipeline", ["python", "wa_pipeline.py"], None,
+                       "2026-01-01T00:00:07Z", "2026-01-01T00:00:12Z", 5.2, 1, "failed", 1,
+                       error="Non-zero exit code: 1",
+                       stderr_tail="requests.exceptions.HTTPError: 400 Bad Request\nfor url: https://api.elevenlabs.io/..."),
+        ]
+        send_summary_email(fake)
+        sys.exit(0)
 
     logger.info("Python: %s", sys.executable)
     logger.info("Platform: %s", platform.platform())
@@ -293,6 +401,9 @@ def main():
     with summary_path.open("w", encoding="utf-8") as f:
         json.dump([asdict(x) for x in results], f, indent=2)
     logger.info("Summary written to: %s", summary_path)
+
+    # Email summary (non-fatal)
+    send_summary_email(results)
 
     # Exit code reflects overall success
     sys.exit(0 if fail == 0 else 1)
