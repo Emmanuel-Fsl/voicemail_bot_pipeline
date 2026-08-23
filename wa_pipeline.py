@@ -379,11 +379,20 @@ def expand_language(code: str) -> str:
 
 def normalise_phone(raw: str) -> str:
     raw = raw.strip()
+    if raw.startswith("+254"):
+        return "0" + raw[4:]          # Kenyan: +254712345678 → 0712345678
+    if raw.startswith("254") and len(raw) >= 12:
+        return "0" + raw[3:]          # Kenyan: 254712345678 → 0712345678
     if raw.startswith("+234"):
         raw = "0" + raw[4:]
     elif raw.startswith("234") and len(raw) >= 13:
         raw = "0" + raw[3:]
-    return ("0" + raw)[-11:]
+    digits = "".join(c for c in raw if c.isdigit())
+    if len(digits) == 9:
+        return "0" + digits            # Kenyan bare: 712345678 → 0712345678
+    if len(digits) == 10 and digits.startswith("0"):
+        return digits                  # Kenyan local: 0712345678
+    return ("0" + raw)[-11:]          # Nigerian: always 11 digits
 
 
 def parse_system_time(system_time: str) -> datetime:

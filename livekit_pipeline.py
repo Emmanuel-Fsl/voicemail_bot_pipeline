@@ -326,11 +326,20 @@ def send_alert(
 # ── Helpers ───────────────────────────────────────────────────────────────
 def normalise_phone(raw: str) -> str:
     raw = raw.strip()
+    if raw.startswith("+254"):
+        return "0" + raw[4:]          # Kenyan: +254712345678 → 0712345678
+    if raw.startswith("254") and len(raw) >= 12:
+        return "0" + raw[3:]          # Kenyan: 254712345678 → 0712345678
     if raw.startswith("+234"):
         raw = "0" + raw[4:]
     elif raw.startswith("234") and len(raw) >= 13:
         raw = "0" + raw[3:]
-    return ("0" + raw)[-11:]
+    digits = "".join(c for c in raw if c.isdigit())
+    if len(digits) == 9:
+        return "0" + digits            # Kenyan bare: 712345678 → 0712345678
+    if len(digits) == 10 and digits.startswith("0"):
+        return digits                  # Kenyan local: 0712345678
+    return ("0" + raw)[-11:]          # Nigerian: always 11 digits
 
 
 def to_iso(dt: datetime) -> str:
@@ -569,5 +578,53 @@ def run(calls: list[dict] | None = None):
     log.info("=== Pipeline complete ===")
 
 
-if __name__ == "__main__":
+def _is_kenyan_raw(phone: str) -> bool:
+    """Return True if the raw phone number looks Kenyan before normalisation."""
+    p = phone.strip()
+    if p.startswith("+254") or (p.startswith("254") and len(p) >= 12):
+        return True
+    digits = "".join(c for c in p if c.isdigit())
+    if len(digits) == 9:
+        return True                    # bare 9-digit: 712345678
+    if len(digits) == 10 and digits.startswith("0"):
+        return True                    # local 10-digit: 0712345678
+    return False
+
+
+def backfill_kenyan():
+    """One-time backfill: reset pipeline_processed on all Livekit calls that
+    have a Kenyan phone number so the next run re-processes them with the
+    corrected normalise_phone logic."""
+    log.info("=== Kenyan backfill: scanning live_kit_bot_calls ===")
+    db = _fs()
+    docs = list(db.collection(SOURCE_COLLECTION).stream())
+    log.info("Total docs: %d", len(docs))
+
+    to_reset = []
+    for d in docs:
+        data = d.to_dict() or {}
+        phone = data.get("phone_number", "")
+        if phone and _is_kenyan_raw(phone):
+            to_reset.append(d)
+            log.info("  Kenyan detected: %s  doc=%s", phone, d.id)
+
+    log.info("Resetting pipeline_processed on %d Kenyan calls", len(to_reset))
+    for d in to_reset:
+        d.reference.update({"pipeline_processed": False})
+
+    log.info("Reset done — running pipeline now")
     run()
+    log.info("=== Kenyan backfill complete ===")
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--backfill-kenyan", action="store_true",
+                        help="Reset and reprocess all Kenyan phone number calls")
+    args = parser.parse_args()
+
+    if args.backfill_kenyan:
+        backfill_kenyan()
+    else:
+        run()
