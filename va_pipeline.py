@@ -73,7 +73,7 @@ ALERT_CATEGORIES = {
 RECIPIENT_MAP = {
     0: "gbolade@fsldigital.com",
     1: "dami.adeyanju@fsldigital.com",
-    2: "jedidah@fsldigital.com",
+    2: "lynda@fsldigital.com",
     3: "kesta@fsldigital.com",
     4: "emmanuella@fsldigital.com",
     5: "itoro@fsldigital.com",
