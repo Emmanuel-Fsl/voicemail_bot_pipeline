@@ -379,7 +379,8 @@ def parse_system_time(system_time: str) -> datetime:
 
 
 def to_iso(dt: datetime) -> str:
-    """Format datetime as 2026-05-20T17:19:00.000Z"""
+    """Format datetime as 2026-05-20T17:19:00.000Z (always UTC)"""
+    dt = dt.astimezone(timezone.utc)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
 
 

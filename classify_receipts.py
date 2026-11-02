@@ -45,7 +45,7 @@ GMAIL_APP_PASSWORD  = os.environ["GMAIL_APP_PASSWORD"]
 GOOGLE_SA_FILE      = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json")
 
 BQ_PROJECT          = "fssspark"
-INSTITUTION         = "BAOBAB"
+INSTITUTION         = "SYCAMORE MFB"
 BQ_TABLE            = f"`{BQ_PROJECT}.original_cohorts.customer_uploads_with_details`"
 
 GCS_UPLOAD_BUCKET   = "customer_upload"
@@ -56,7 +56,7 @@ CLOUD_RUN_URL       = "https://classify-runner-270783804340.us-central1.run.app"
 CLOUD_RUN_SA_EMAIL  = "emmanuel@fssspark.iam.gserviceaccount.com"
 
 EMAIL_TO            = "emmanuel@fsldigital.com"
-EMAIL_CC            = ["tech@fsldigital.com", "joyce@fsldigital.com"]
+EMAIL_CC            = ["tech@fsldigital.com", "joyce@fsldigital.com", "tomiwa@fsldigital.com"]
 
 GPT_MODEL           = "gpt-4o"
 
@@ -188,7 +188,7 @@ def _to_vision_data_url(url: str, creds: service_account.Credentials) -> str:
 
 def query_bigquery(creds: service_account.Credentials) -> list[dict]:
     bq = bigquery.Client(project=BQ_PROJECT, credentials=creds)
-    sql = f"SELECT * FROM {BQ_TABLE} WHERE institution = '{INSTITUTION}'"
+    sql = f"SELECT * FROM {BQ_TABLE} WHERE institution = '{INSTITUTION}' AND date between '2026-07-01' AND CURRENT_DATE()"
     log.info("BigQuery: querying %s ...", BQ_TABLE)
     rows = [dict(row) for row in bq.query(sql).result()]
     log.info("BigQuery: %d rows fetched", len(rows))
