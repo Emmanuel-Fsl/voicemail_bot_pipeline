@@ -36,6 +36,8 @@ from google.cloud import bigquery, firestore
 from google.oauth2 import service_account
 from openai import OpenAI
 
+from customer_lookup import find_customer
+
 load_dotenv()
 
 logging.basicConfig(
@@ -488,7 +490,11 @@ def run():
         # ── 6. Build shared document ──────────────────────────────────────────
         doc_id  = f"{phone_norm}_{epoch_ms(system_time)}"
         call_ts = to_iso(parse_system_time(system_time))
-        now_dt  = to_iso(datetime.now(timezone(timedelta(hours=1))))
+        # Native Firestore Timestamps, like every note the app writes — a string here
+        # sorts apart from them and puts notes out of date order.
+        call_at = parse_system_time(system_time)
+        now_at  = datetime.now(timezone.utc)
+        customer = find_customer(phone_norm, institution, bq)
 
         call_notes = {
             "Amount_Promised":          extracted.get("Amount_Promised", ""),
@@ -510,10 +516,11 @@ def run():
             "phone":                    phone_norm,
             "ptp_date":                 extracted.get("ptp_date", ""),
             "reason_for_default":       extracted.get("reason_for_default", ""),
-            "timestamp":                call_ts,
-            "updated_at":               now_dt,
+            "timestamp":                call_at,
+            "updated_at":               now_at,
             "discount_accepted":        extracted.get("discount_accepted"),
             "language":                 extracted.get("language", ""),
+            **customer,                 # fss_id, client_id, client_name, country
         }
 
         # ── 7. Firestore — call_notes_latest (doc ID = phone) ───────────────

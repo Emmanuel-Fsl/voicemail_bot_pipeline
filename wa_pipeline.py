@@ -44,6 +44,8 @@ from google.cloud import bigquery, firestore, storage as gcs_storage
 from google.oauth2 import service_account
 from openai import OpenAI
 
+from customer_lookup import find_customer
+
 load_dotenv()
 
 logging.basicConfig(
@@ -523,6 +525,7 @@ def upload_conversation_files(
     other_info: str,
     db: firestore.Client,
     bucket,
+    bq: Optional[bigquery.Client] = None,
 ) -> list[dict]:
     """Upload file attachments to GCS and write metadata to customer_uploads_bot.
     Returns a list of uploaded file dicts: {fname, data, ctype} — kept in memory
@@ -542,6 +545,9 @@ def upload_conversation_files(
     if not file_entries:
         log.info("  file_input.used=True but no entries in transcript — skipping")
         return []
+
+    # Tag the receipt with the customer, so the team sees whose payment it is.
+    customer = find_customer(phone_norm, institution or "", bq) if bq else {}
 
     uploaded = []
     for entry in file_entries:
@@ -579,7 +585,9 @@ def upload_conversation_files(
                     "phone":           phone_norm,
                     "message":         other_info,
                     "institution":     institution,
-                    "client_id":       "",
+                    "client_id":       customer.get("client_id", ""),
+                    "client_name":     customer.get("client_name", ""),
+                    "fss_id":          customer.get("fss_id", ""),
                     "type":            "payment proof",
                     "file_name":       fname,
                     "file_id":         file_obj.get("file_id", ""),
@@ -714,7 +722,7 @@ def run():
             uploaded_files = upload_conversation_files(
                 conversation_id, detail, phone_norm,
                 dcv("institution"), dcv("other_information"),
-                db, bucket,
+                db, bucket, bq,
             )
             if uploaded_files:
                 log.info("  ✓ %d file(s) uploaded to customer_uploads_bot", len(uploaded_files))
@@ -755,7 +763,11 @@ def run():
         # ── 8. Build shared document ──────────────────────────────────────────
         doc_id  = f"{phone_norm}_{epoch_ms(system_time)}"
         call_ts = to_iso(parse_system_time(system_time))
-        now_dt  = to_iso(datetime.now(timezone(timedelta(hours=1))))
+        # Native Firestore Timestamps, like every note the app writes — a string here
+        # sorts apart from them and puts notes out of date order.
+        call_at = parse_system_time(system_time)
+        now_at  = datetime.now(timezone.utc)
+        customer = find_customer(phone_norm, institution, bq)
 
         call_notes = {
             "Amount_Promised":          dcv("Amount_Promised"),
@@ -777,10 +789,11 @@ def run():
             "phone":                    phone_norm,
             "ptp_date":                 normalise_ptp_date(dcv("ptp_date")),
             "reason_for_default":       dcv("reason_for_default"),
-            "timestamp":                call_ts,
-            "updated_at":               now_dt,
+            "timestamp":                call_at,
+            "updated_at":               now_at,
             "discount_accepted":        extracted.get("discount_accepted"),
             "language":                 expand_language(metadata.get("main_language", "")),
+            **customer,                 # fss_id, client_id, client_name, country
         }
 
         # ── 9. Firestore — call_notes_latest (doc ID = phone) ───────────────
