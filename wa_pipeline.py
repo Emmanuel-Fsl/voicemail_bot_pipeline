@@ -44,7 +44,7 @@ from google.cloud import bigquery, firestore, storage as gcs_storage
 from google.oauth2 import service_account
 from openai import OpenAI
 
-from customer_lookup import find_customer
+from customer_lookup import find_customer, recipient_for
 
 load_dotenv()
 
@@ -317,7 +317,12 @@ INSTITUTION_OVERRIDES = {
 }
 
 
-def route_recipient(phone: str, institution: str = "") -> str:
+def route_recipient(phone: str, institution: str = "", bq=None) -> str:
+    # The customer's assigned agent in BigQuery (leads_active.assigned_agent) wins;
+    # the institution override and the last-2-digits split are only fallbacks.
+    assigned = recipient_for(phone, institution, bq)
+    if assigned:
+        return assigned
     override = INSTITUTION_OVERRIDES.get((institution or "").upper())
     if override:
         return override
@@ -827,7 +832,7 @@ def run():
                     call_dt=call_dt,
                     summary=analysis.get("transcript_summary", ""),
                     other_info=dcv("other_information"),
-                    recipient=route_recipient(phone_norm, institution),
+                    recipient=route_recipient(phone_norm, institution, bq),
                     attachments=uploaded_files if is_receipt else None,
                 )
                 log.info("  ✓ email sent — %s", category)
@@ -837,7 +842,7 @@ def run():
             try:
                 db.collection("agent_notifications").document(conversation_id).set({
                     "type":            "whatsapp",
-                    "recipient_email": route_recipient(phone_norm, institution),
+                    "recipient_email": route_recipient(phone_norm, institution, bq),
                     "phone":           phone_norm,
                     "category":        category,
                     "institution":     institution,

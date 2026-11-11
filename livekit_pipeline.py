@@ -50,7 +50,7 @@ from google.cloud import bigquery, firestore
 from google.oauth2 import service_account
 from openai import OpenAI
 
-from customer_lookup import find_customer
+from customer_lookup import find_customer, recipient_for
 
 load_dotenv()
 
@@ -284,7 +284,12 @@ INSTITUTION_OVERRIDES = {
 }
 
 
-def route_recipient(phone: str, institution: str = "") -> str:
+def route_recipient(phone: str, institution: str = "", bq=None) -> str:
+    # The customer's assigned agent in BigQuery (leads_active.assigned_agent) wins;
+    # the institution override and the last-2-digits split are only fallbacks.
+    assigned = recipient_for(phone, institution, bq)
+    if assigned:
+        return assigned
     override = INSTITUTION_OVERRIDES.get((institution or "").upper())
     if override:
         return override
@@ -550,7 +555,7 @@ def run(calls: list[dict] | None = None):
                     institution=institution,
                     call_dt=call_dt,
                     other_info=extracted.get("other_information", ""),
-                    recipient=route_recipient(phone_norm, institution),
+                    recipient=route_recipient(phone_norm, institution, bq),
                     summary=transcript_summary,
                 )
                 log.info("  ✓ email sent — %s", category)
@@ -561,7 +566,7 @@ def run(calls: list[dict] | None = None):
                 db.collection("agent_notifications").document(room_name).set(
                     {
                         "type": "voice_call",
-                        "recipient_email": route_recipient(phone_norm, institution),
+                        "recipient_email": route_recipient(phone_norm, institution, bq),
                         "phone": phone_norm,
                         "category": category,
                         "institution": institution,
